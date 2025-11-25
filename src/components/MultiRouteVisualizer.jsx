@@ -3,7 +3,7 @@ import {
     Trash2, Plus, Map as MapIcon, Navigation, Target,
     Loader2, Clipboard, ArrowDown, RotateCcw, Copy, Check,
     Circle as CircleIcon, FileUp, Layers, MousePointer2,
-    Search, MapPin
+    Search, MapPin, Globe
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,6 +48,9 @@ export default function MultiRouteVisualizer() {
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
 
+    // Map Layer State
+    const [mapType, setMapType] = useState('standard'); // 'standard' | 'satellite'
+
     // System State
     const [isLoading, setIsLoading] = useState(false);
     const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -62,15 +65,19 @@ export default function MultiRouteVisualizer() {
     const mapRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const layerGroupRef = useRef(null);
+    const tileLayerRef = useRef(null);
 
     // 2. Khởi tạo Map
     useEffect(() => {
         if (isMapReady && !mapInstanceRef.current && mapRef.current) {
             const map = L.map(mapRef.current).setView([10.7769, 106.7009], 13);
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // Default to standard layer initially
+            const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
+
+            tileLayerRef.current = tileLayer;
 
             map.getContainer().addEventListener('contextmenu', (e) => e.preventDefault());
             map.on('contextmenu', (e) => {
@@ -97,6 +104,19 @@ export default function MultiRouteVisualizer() {
             mapInstanceRef.current = map;
         }
     }, [isMapReady]);
+
+    // Handle Map Layer Switch
+    useEffect(() => {
+        if (tileLayerRef.current) {
+            if (mapType === 'satellite') {
+                tileLayerRef.current.setUrl('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+                tileLayerRef.current.options.attribution = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+            } else {
+                tileLayerRef.current.setUrl('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+                tileLayerRef.current.options.attribution = '&copy; OpenStreetMap contributors';
+            }
+        }
+    }, [mapType]);
 
     // 3. RENDER LỚP BẢN ĐỒ
     useEffect(() => {
@@ -385,6 +405,22 @@ export default function MultiRouteVisualizer() {
                         fileName: file.name,
                         data: features
                     }]);
+
+                    // Auto-zoom to the imported features
+                    if (mapInstanceRef.current) {
+                        const bounds = L.latLngBounds();
+                        features.forEach(f => {
+                            if (f.type === 'LineString') {
+                                f.coordinates.forEach(c => bounds.extend(c));
+                            } else if (f.type === 'Point') {
+                                bounds.extend(f.coordinates);
+                            }
+                        });
+                        if (bounds.isValid()) {
+                            mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
+                        }
+                    }
+
                 } else {
                     alert("Không tìm thấy dữ liệu đường đi/điểm hợp lệ trong file này.");
                 }
@@ -423,6 +459,7 @@ export default function MultiRouteVisualizer() {
                     </div>
                     <button onClick={handleSetStartFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 flex items-center gap-2"><Navigation className="w-4 h-4" /> Đặt điểm Bắt đầu</button>
                     <button onClick={handleSetEndFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-700 flex items-center gap-2"><Target className="w-4 h-4" /> Đặt điểm Kết thúc</button>
+                    <button onClick={handleAddCircleFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-700 flex items-center gap-2"><CircleIcon className="w-4 h-4" /> Vẽ bán kính tại đây</button>
                     <div className="h-px bg-gray-100 my-1"></div>
                     <button onClick={handleCopyCoords} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2">
                         {copyFeedback ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />} {copyFeedback ? 'Đã copy!' : 'Copy tọa độ'}
@@ -468,10 +505,28 @@ export default function MultiRouteVisualizer() {
                     )}
                 </div>
 
-                <div className="flex gap-4 text-sm font-medium text-gray-500 flex-shrink-0 hidden md:flex">
-                    <span>Routes: <b className="text-blue-600">{routes.length}</b></span>
-                    <span>Circles: <b className="text-red-500">{circles.length}</b></span>
-                    <span>Files: <b className="text-purple-600">{importedLayers.length}</b></span>
+                <div className="flex items-center gap-4">
+                    {/* Layer Switcher */}
+                    <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                        <button
+                            onClick={() => setMapType('standard')}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${mapType === 'standard' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <MapIcon className="w-3.5 h-3.5" /> Bản đồ
+                        </button>
+                        <button
+                            onClick={() => setMapType('satellite')}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${mapType === 'satellite' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <Globe className="w-3.5 h-3.5" /> Vệ tinh
+                        </button>
+                    </div>
+
+                    <div className="flex gap-4 text-sm font-medium text-gray-500 flex-shrink-0 hidden lg:flex">
+                        <span>Routes: <b className="text-blue-600">{routes.length}</b></span>
+                        <span>Circles: <b className="text-red-500">{circles.length}</b></span>
+                        <span>Files: <b className="text-purple-600">{importedLayers.length}</b></span>
+                    </div>
                 </div>
             </header>
 
