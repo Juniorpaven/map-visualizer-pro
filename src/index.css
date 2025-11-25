@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-slate-800 bg-gray-50;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom Map Styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Custom Popup */
+.custom-popup .leaflet-popup-content-wrapper {
+  @apply rounded-lg shadow-xl border border-gray-100 p-0 overflow-hidden;
+}
+
+.custom-popup .leaflet-popup-content {
+  @apply m-0;
+}
+
+.custom-popup .leaflet-popup-tip {
+  @apply bg-white;
+}
+
+/* Animations */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+.marker-pulse::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: inherit;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  z-index: -1;
+}
+
+/* Hide scrollbar for clean UI */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
