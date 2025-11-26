@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Trash2, Plus, Map as MapIcon, Navigation, Target,
-    Loader2, Clipboard, ArrowDown, RotateCcw, Copy, Check,
+    Loader2, ArrowDown, RotateCcw, Copy, Check,
     Circle as CircleIcon, FileUp, Layers, MousePointer2,
-    Search, MapPin, Globe
+    Search, MapPin, Globe, Home
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,6 +48,11 @@ export default function MultiRouteVisualizer() {
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
 
+    // Home & Amenities State
+    const [homeLocation, setHomeLocation] = useState(null); // { lat, lon }
+    const [amenities, setAmenities] = useState([]);
+    const [isFetchingAmenities, setIsFetchingAmenities] = useState(false);
+
     // Map Layer State
     const [mapType, setMapType] = useState('standard'); // 'standard' | 'satellite'
 
@@ -56,9 +61,6 @@ export default function MultiRouteVisualizer() {
     const [isProcessingFile, setIsProcessingFile] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
     const [copyFeedback, setCopyFeedback] = useState(false);
-
-    const [isMapReady, setIsMapReady] = useState(true);
-    const [isZipReady, setIsZipReady] = useState(true);
 
     const [mapZoom, setMapZoom] = useState(13);
 
@@ -69,7 +71,7 @@ export default function MultiRouteVisualizer() {
 
     // 2. Khởi tạo Map
     useEffect(() => {
-        if (isMapReady && !mapInstanceRef.current && mapRef.current) {
+        if (!mapInstanceRef.current && mapRef.current) {
             const map = L.map(mapRef.current).setView([10.7769, 106.7009], 13);
 
             // Default to standard layer initially
@@ -103,7 +105,7 @@ export default function MultiRouteVisualizer() {
             layerGroupRef.current = L.layerGroup().addTo(map);
             mapInstanceRef.current = map;
         }
-    }, [isMapReady]);
+    }, []);
 
     // Handle Map Layer Switch
     useEffect(() => {
@@ -240,9 +242,77 @@ export default function MultiRouteVisualizer() {
             });
         });
 
-    }, [routes, circles, importedLayers, isMapReady, mapZoom]);
+        // D. VẼ HOME & AMENITIES
+        if (homeLocation) {
+            const homeIcon = L.divIcon({
+                className: 'custom-home-marker',
+                html: `<div style="background-color: #EF4444; width: 32px; height: 32px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                       </div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 32]
+            });
+            L.marker([homeLocation.lat, homeLocation.lon], { icon: homeIcon, zIndexOffset: 1000 })
+                .bindPopup('<b class="text-red-600">Vị trí Nhà / Đầu tư</b>')
+                .addTo(layerGroup);
+
+            // Vẽ vòng tròn 2km
+            L.circle([homeLocation.lat, homeLocation.lon], {
+                radius: 2000,
+                color: '#EF4444',
+                weight: 1,
+                dashArray: '5, 5',
+                fillOpacity: 0.05
+            }).addTo(layerGroup);
+
+            allBounds.push([homeLocation.lat, homeLocation.lon]);
+        }
+
+        amenities.forEach(item => {
+            let color = '#3B82F6';
+            let iconSvg = '';
+
+            if (item.type === 'school') {
+                color = '#F59E0B'; // Amber
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/></svg>';
+            } else if (item.type === 'hospital') {
+                color = '#EF4444'; // Red
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v4"/><path d="M14 14h-4"/><path d="M14 18h-4"/><path d="M14 8h-4"/><path d="M18 12h-4"/><path d="M6 12h4"/><path d="M3 22h18"/><path d="M18 22V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v18"/></svg>';
+            } else if (item.type === 'market') {
+                color = '#10B981'; // Green
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 11-1 9"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="m4.5 15.5h15"/><path d="m5 11 4-7"/><path d="m9 11 1 9"/></svg>';
+            } else if (item.type === 'park') {
+                color = '#22C55E'; // Green
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10v.2A3 3 0 0 1 8.9 16v0H5v0h0a3 3 0 0 1-1-5.8V10a3 3 0 0 1 5.3-2.1"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .9-1.7l-3.5-6a1 1 0 0 0-1.7 0l-3.5 6a1 1 0 0 0 .9 1.7"/></svg>';
+            }
+
+            const amenityIcon = L.divIcon({
+                className: 'custom-amenity-marker',
+                html: `<div style="background-color: white; width: 24px; height: 24px; border-radius: 50%; border: 2px solid ${color}; display: flex; align-items: center; justify-content: center; color: ${color}; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                        ${iconSvg}
+                       </div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            L.marker([item.lat, item.lon], { icon: amenityIcon })
+                .bindPopup(`<div class="text-center"><b style="color:${color}">${item.name || 'Tiện ích'}</b><br/><span class="text-xs text-gray-500 capitalize">${item.type}</span></div>`)
+                .addTo(layerGroup);
+        });
+
+    }, [routes, circles, importedLayers, homeLocation, amenities, mapZoom]);
 
     // --- LOGIC: Context Menu ---
+    const handleSetHomeFromMenu = () => {
+        if (contextMenu) {
+            const lat = contextMenu.lat;
+            const lon = contextMenu.lon;
+            setHomeLocation({ lat, lon });
+            setContextMenu(null);
+            fetchAmenities(lat, lon);
+        }
+    };
+
     const handleSetStartFromMenu = () => {
         if (contextMenu) {
             setStartLat(contextMenu.lat.toString());
@@ -273,6 +343,58 @@ export default function MultiRouteVisualizer() {
             setCopyFeedback(true);
             setTimeout(() => setContextMenu(null), 600);
         }
+    };
+
+    // --- LOGIC: Amenities ---
+    const fetchAmenities = async (lat, lon) => {
+        setIsFetchingAmenities(true);
+        setAmenities([]);
+        // Overpass API query
+        const query = `
+            [out:json][timeout:25];
+            (
+              node["amenity"~"school|hospital|marketplace"](around:2000,${lat},${lon});
+              way["amenity"~"school|hospital|marketplace"](around:2000,${lat},${lon});
+              node["leisure"="park"](around:2000,${lat},${lon});
+              way["leisure"="park"](around:2000,${lat},${lon});
+            );
+            out center;
+        `;
+
+        try {
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: query
+            });
+            const data = await response.json();
+
+            const items = data.elements.map(el => {
+                const type = el.tags.amenity || el.tags.leisure;
+                const name = el.tags.name || 'Không tên';
+                const l = el.lat || el.center?.lat;
+                const ln = el.lon || el.center?.lon;
+
+                let simpleType = 'other';
+                if (type === 'school' || type === 'university' || type === 'kindergarten') simpleType = 'school';
+                else if (type === 'hospital' || type === 'clinic') simpleType = 'hospital';
+                else if (type === 'marketplace') simpleType = 'market';
+                else if (type === 'park') simpleType = 'park';
+
+                return {
+                    id: el.id,
+                    type: simpleType,
+                    name: name,
+                    lat: l,
+                    lon: ln
+                };
+            }).filter(i => i.lat && i.lon);
+
+            setAmenities(items);
+        } catch (err) {
+            console.error("Error fetching amenities:", err);
+            alert("Không thể tải dữ liệu tiện ích. Vui lòng thử lại sau.");
+        }
+        setIsFetchingAmenities(false);
     };
 
     // --- LOGIC: Search ---
@@ -314,7 +436,7 @@ export default function MultiRouteVisualizer() {
                 const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                 return { path: coords, distance: data.routes[0].distance };
             }
-        } catch (e) { }
+        } catch (e) { console.error(e); }
         return { path: [startCoords, endCoords], distance: 0 };
     };
 
@@ -459,6 +581,7 @@ export default function MultiRouteVisualizer() {
                     </div>
                     <button onClick={handleSetStartFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 flex items-center gap-2"><Navigation className="w-4 h-4" /> Đặt điểm Bắt đầu</button>
                     <button onClick={handleSetEndFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-700 flex items-center gap-2"><Target className="w-4 h-4" /> Đặt điểm Kết thúc</button>
+                    <button onClick={handleSetHomeFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 flex items-center gap-2"><Home className="w-4 h-4" /> Đặt Nhà (Quét tiện ích)</button>
                     <button onClick={handleAddCircleFromMenu} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-700 flex items-center gap-2"><CircleIcon className="w-4 h-4" /> Vẽ bán kính tại đây</button>
                     <div className="h-px bg-gray-100 my-1"></div>
                     <button onClick={handleCopyCoords} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2">
@@ -545,6 +668,9 @@ export default function MultiRouteVisualizer() {
                         </button>
                         <button onClick={() => setActiveTab('file')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'file' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
                             <FileUp className="w-4 h-4" /> KMZ
+                        </button>
+                        <button onClick={() => setActiveTab('amenity')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'amenity' ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
+                            <Home className="w-4 h-4" /> Tiện ích
                         </button>
                     </div>
 
@@ -646,7 +772,7 @@ export default function MultiRouteVisualizer() {
 
                                 {/* List Circles */}
                                 <div className="mt-6 space-y-2">
-                                    {circles.map((c, i) => (
+                                    {circles.map((c) => (
                                         <div key={c.id} className="flex justify-between items-center bg-white p-2.5 rounded border border-gray-200 shadow-sm text-sm hover:border-yellow-300 transition-colors group">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-4 h-4 rounded-full border-2" style={{ background: c.color, borderColor: c.color }}></div>
@@ -666,21 +792,28 @@ export default function MultiRouteVisualizer() {
                         {/* TAB: FILE KMZ */}
                         {activeTab === 'file' && (
                             <div className="space-y-4">
-                                <div className="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center hover:bg-purple-50 transition-colors cursor-pointer group" onClick={() => document.getElementById('file-upload').click()}>
-                                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                                        <FileUp className="w-6 h-6" />
+                                {isProcessingFile ? (
+                                    <div className="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 bg-purple-50">
+                                        <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+                                        <span className="text-sm text-purple-600 font-medium">Đang xử lý file...</span>
                                     </div>
-                                    <p className="text-sm font-semibold text-gray-700">Tải lên file KMZ hoặc KML</p>
-                                    <p className="text-xs text-gray-400 mt-1">Hỗ trợ hiển thị đường (LineString) và điểm (Point)</p>
+                                ) : (
+                                    <div className="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center hover:bg-purple-50 transition-colors cursor-pointer group" onClick={() => document.getElementById('file-upload').click()}>
+                                        <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                                            <FileUp className="w-6 h-6" />
+                                        </div>
+                                        <p className="text-sm font-semibold text-gray-700">Tải lên file KMZ hoặc KML</p>
+                                        <p className="text-xs text-gray-400 mt-1">Hỗ trợ hiển thị đường (LineString) và điểm (Point)</p>
 
-                                    <input
-                                        type="file"
-                                        accept=".kmz,.kml"
-                                        onChange={handleImportKMZ}
-                                        className="hidden"
-                                        id="file-upload"
-                                    />
-                                </div>
+                                        <input
+                                            type="file"
+                                            accept=".kmz,.kml"
+                                            onChange={handleImportKMZ}
+                                            className="hidden"
+                                            id="file-upload"
+                                        />
+                                    </div>
+                                )}
 
                                 {/* List Imported */}
                                 <div className="space-y-2">
@@ -699,17 +832,72 @@ export default function MultiRouteVisualizer() {
                             </div>
                         )}
 
+                        {/* TAB: AMENITY */}
+                        {activeTab === 'amenity' && (
+                            <div className="space-y-4">
+                                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                                    <label className="text-xs font-bold text-orange-800 flex justify-between items-center mb-1">
+                                        Vị trí Nhà / Trung tâm
+                                        <span className="font-normal bg-white px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 cursor-help border border-orange-100 shadow-sm text-orange-700" title="Chuột phải lên bản đồ để lấy nhanh"><MousePointer2 className="w-3 h-3" /> Click map</span>
+                                    </label>
+
+                                    {homeLocation ? (
+                                        <div className="flex justify-between items-center bg-white p-2.5 rounded border border-orange-200 shadow-sm text-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white shadow-sm">
+                                                    <Home className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium text-gray-700">Vị trí đang chọn</div>
+                                                    <div className="text-xs text-gray-500">{homeLocation.lat.toFixed(5)}, {homeLocation.lon.toFixed(5)}</div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => { setHomeLocation(null); setAmenities([]); }} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition-colors" title="Xóa vị trí nhà">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-xs text-gray-400 py-4 italic border-2 border-dashed border-orange-200 rounded bg-white">
+                                            Chưa đặt vị trí nhà
+                                        </div>
+                                    )}
+
+                                    {isFetchingAmenities && (
+                                        <div className="flex items-center justify-center py-4 text-orange-500 gap-2 text-sm">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Đang tải tiện ích...
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* List Amenities Count */}
+                                {amenities.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tiện ích xung quanh (2km)</h3>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-white p-2 rounded border border-gray-200 text-center">
+                                                <div className="text-lg font-bold text-blue-600">{amenities.length}</div>
+                                                <div className="text-xs text-gray-500">Tổng số</div>
+                                            </div>
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                            {amenities.map(item => (
+                                                <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border border-gray-100 text-xs">
+                                                    <span className="truncate font-medium text-gray-700">{item.name}</span>
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 capitalize">{item.type}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 </div>
 
                 {/* Map Area */}
                 <div className="flex-1 relative bg-gray-100">
-                    {(!isMapReady || !isZipReady) && (
-                        <div className="absolute inset-0 flex items-center justify-center text-gray-400 z-10 bg-gray-50/80 backdrop-blur-sm flex-col gap-3">
-                            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-                            <span className="text-sm font-medium text-gray-600">Đang khởi tạo bản đồ...</span>
-                        </div>
-                    )}
                     <div ref={mapRef} className="w-full h-full z-0 outline-none" />
 
                     <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2.5 text-xs text-gray-600 rounded-lg shadow-lg backdrop-blur-md z-[1000] pointer-events-none border border-white/50 flex items-center gap-2">

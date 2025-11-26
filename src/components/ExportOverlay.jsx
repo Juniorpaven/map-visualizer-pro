@@ -1,12 +1,12 @@
-import React from 'react';
+
 import MapComponent from './MapComponent';
 import { Phone, MapPin, Clock, Navigation } from 'lucide-react';
 
 export default function ExportOverlay({ agent, property, destinations, amenities }) {
     // Calculate Summary Metrics
-    const totalDist = destinations.reduce((acc, d) => acc + d.distance, 0) / 1000;
+    // const totalDist = destinations.reduce((acc, d) => acc + d.distance, 0) / 1000;
     const totalTime = destinations.reduce((acc, d) => acc + d.duration, 0) / 60;
-    const amenityCount = Object.values(amenities).reduce((acc, val) => acc + (val.active ? val.data.length : 0), 0);
+    // const amenityCount = Object.values(amenities).reduce((acc, val) => acc + (val.active ? val.data.length : 0), 0);
 
     return (
         <div className="w-full h-full flex flex-col bg-white">

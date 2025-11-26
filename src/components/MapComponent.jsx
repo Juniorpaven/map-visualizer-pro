@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { School, Cross, ShoppingBag, TreePine, MapPin } from 'lucide-react';
+import { School, Cross, ShoppingBag, TreePine } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 // --- ICONS ---

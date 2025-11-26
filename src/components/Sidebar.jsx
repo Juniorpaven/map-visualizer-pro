@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Trash2, Plus, Search, MapPin, School, Cross, ShoppingBag, TreePine, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Upload, Trash2, Search, MapPin, School, Cross, ShoppingBag, TreePine, Loader2 } from 'lucide-react';
 import { fetchRoute, fetchAmenities, searchLocation } from '../utils/api';
 
 export default function Sidebar({
@@ -37,22 +37,22 @@ export default function Sidebar({
         setIsSearching(false);
     };
 
-    const handleAddDestination = async () => {
-        if (!property) {
-            alert("Please pin the Target Property first!");
-            return;
-        }
-        // For MVP, we'll just add a placeholder or ask user to click map.
-        // Better: Allow user to search for destination or click map.
-        // Let's implement "Click Map to Add" logic in main component, 
-        // but here we can add via search if we had a second search box.
-        // For now, let's assume we add a "Pending" destination that waits for a map click?
-        // Or simpler: Just a button "Add Destination" that enables a "Pick Mode".
-        // Let's stick to the requirements: "Agent inputs key destinations".
+    // const handleAddDestination = async () => {
+    //     if (!property) {
+    //         alert("Please pin the Target Property first!");
+    //         return;
+    //     }
+    //     // For MVP, we'll just add a placeholder or ask user to click map.
+    //     // Better: Allow user to search for destination or click map.
+    //     // Let's implement "Click Map to Add" logic in main component, 
+    //     // but here we can add via search if we had a second search box.
+    //     // For now, let's assume we add a "Pending" destination that waits for a map click?
+    //     // Or simpler: Just a button "Add Destination" that enables a "Pick Mode".
+    //     // Let's stick to the requirements: "Agent inputs key destinations".
 
-        // Let's simulate a random nearby point for demo if no input, 
-        // OR better: use the search results to add a destination.
-    };
+    //     // Let's simulate a random nearby point for demo if no input, 
+    //     // OR better: use the search results to add a destination.
+    // };
 
     const handleAddRouteFromSearch = async (res) => {
         if (!property) {
@@ -246,9 +246,11 @@ export default function Sidebar({
                                 <button
                                     key={idx}
                                     onClick={() => handleAddRouteFromSearch(res)}
-                                    className="w-full text-left p-2 text-xs hover:bg-gray-50"
+                                    disabled={isAddingRoute}
+                                    className="w-full text-left p-2 text-xs hover:bg-gray-50 disabled:opacity-50 flex justify-between items-center"
                                 >
-                                    {res.display_name}
+                                    <span className="truncate pr-2">{res.display_name}</span>
+                                    {isAddingRoute && <Loader2 className="w-3 h-3 animate-spin text-blue-500 flex-shrink-0" />}
                                 </button>
                             ))}
                         </div>

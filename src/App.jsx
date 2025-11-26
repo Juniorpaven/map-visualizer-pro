@@ -1,4 +1,4 @@
-import React from 'react'
+
 import MultiRouteVisualizer from './components/MultiRouteVisualizer'
 
 function App() {

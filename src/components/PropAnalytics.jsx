@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Share2, Download, LayoutDashboard, User, MapPin, Navigation, Coffee } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react'; // eslint-disable-line no-unused-vars
+import { Map as MapIcon, Download, User, MapPin, Navigation, Coffee } from 'lucide-react';
 import Sidebar from './Sidebar';
 import MapComponent from './MapComponent';
 import ExportOverlay from './ExportOverlay';
