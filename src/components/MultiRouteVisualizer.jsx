@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { read, utils } from 'xlsx';
 import {
     Trash2, Plus, Map as MapIcon, Navigation, Target,
     Loader2, ArrowDown, RotateCcw, Copy, Check,
     Circle as CircleIcon, FileUp, Layers, MousePointer2,
-    Search, MapPin, Globe, Home
+    Search, MapPin, Globe, Home, DollarSign, Eye, EyeOff
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -52,6 +53,22 @@ export default function MultiRouteVisualizer() {
     const [homeLocation, setHomeLocation] = useState(null); // { lat, lon }
     const [amenities, setAmenities] = useState([]);
     const [isFetchingAmenities, setIsFetchingAmenities] = useState(false);
+
+    // Heatmap State
+    const [heatmapData, setHeatmapData] = useState([]); // [{id, street, price, geometry: [[lat,lon],...]}]
+    const [isMatching, setIsMatching] = useState(false); // Matching progress
+    const [matchingProgress, setMatchingProgress] = useState(0); // 0-100
+    const [heatmapSettings, setHeatmapSettings] = useState({
+        opacity: 0.8,
+        visible: true,
+        ranges: {
+            'ultra': true,    // 300-700+ (Yellow)
+            'high': true,     // 100-300 (Light Green)
+            'mid': true,      // 30-100 (Teal)
+            'low': true,      // 10-30 (Blue)
+            'min': true       // <10 (Purple)
+        }
+    });
 
     // Map Layer State
     const [mapType, setMapType] = useState('standard'); // 'standard' | 'satellite'
@@ -227,9 +244,16 @@ export default function MultiRouteVisualizer() {
 
         // C. VẼ FILE IMPORT
         importedLayers.forEach(layer => {
+            const layerOpacity = layer.opacity !== undefined ? layer.opacity : 1.0;
+
             layer.data.forEach(item => {
                 if (item.type === 'LineString') {
-                    L.polyline(item.coordinates, { color: '#8B5CF6', weight: 4, dashArray: '5, 10' })
+                    L.polyline(item.coordinates, {
+                        color: '#8B5CF6',
+                        weight: 4,
+                        dashArray: '5, 10',
+                        opacity: layerOpacity
+                    })
                         .bindPopup(`<b class="text-purple-600">Imported Path</b><br/><span class="text-xs">${layer.fileName}</span>`)
                         .addTo(layerGroup);
                     item.coordinates.forEach(p => allBounds.push(p));
@@ -269,21 +293,31 @@ export default function MultiRouteVisualizer() {
         }
 
         amenities.forEach(item => {
-            let color = '#3B82F6';
-            let iconSvg = '';
+            let color = '#6B7280'; // gray
+            let iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>'; // Plus
 
+            // Define Icons based on type
             if (item.type === 'school') {
-                color = '#F59E0B'; // Amber
-                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/></svg>';
+                color = '#3B82F6'; // Blue
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></svg>';
             } else if (item.type === 'hospital') {
                 color = '#EF4444'; // Red
-                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v4"/><path d="M14 14h-4"/><path d="M14 18h-4"/><path d="M14 8h-4"/><path d="M18 12h-4"/><path d="M6 12h4"/><path d="M3 22h18"/><path d="M18 22V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v18"/></svg>';
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v6c0 1.1.9 2 2 2h5v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2h-6Z"/><path d="M11 11h6a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2Z"/></svg>';
             } else if (item.type === 'market') {
-                color = '#10B981'; // Green
+                color = '#F59E0B'; // Orange
                 iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 11-1 9"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="m4.5 15.5h15"/><path d="m5 11 4-7"/><path d="m9 11 1 9"/></svg>';
             } else if (item.type === 'park') {
                 color = '#22C55E'; // Green
                 iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10v.2A3 3 0 0 1 8.9 16v0H5v0h0a3 3 0 0 1-1-5.8V10a3 3 0 0 1 5.3-2.1"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .9-1.7l-3.5-6a1 1 0 0 0-1.7 0l-3.5 6a1 1 0 0 0 .9 1.7"/></svg>';
+            } else if (item.type === 'cafe') {
+                color = '#854D0E'; // Brown
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/></svg>';
+            } else if (item.type === 'restaurant') {
+                color = '#E11D48'; // Rose
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>';
+            } else if (item.type === 'bank') {
+                color = '#1E40AF'; // Blue Dark
+                iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="2" rx="2"/><line x1="4" x2="4" y1="22" y2="7"/><line x1="20" x2="20" y1="22" y2="7"/><line x1="12" x2="12" y1="22" y2="7"/><line x1="2" x2="22" y1="22" y2="22"/></svg>';
             }
 
             const amenityIcon = L.divIcon({
@@ -296,11 +330,63 @@ export default function MultiRouteVisualizer() {
             });
 
             L.marker([item.lat, item.lon], { icon: amenityIcon })
-                .bindPopup(`<div class="text-center"><b style="color:${color}">${item.name || 'Tiện ích'}</b><br/><span class="text-xs text-gray-500 capitalize">${item.type}</span></div>`)
+                .bindPopup(`
+                    <div class="font-sans min-w-[200px]">
+                        <div class="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+                             <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-sm" style="background-color: ${color}">
+                                ${iconSvg}
+                             </div>
+                             <div>
+                                 <h3 class="font-bold text-gray-800 text-sm leading-tight">${item.name}</h3>
+                                 <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded capitalize">${item.type}</span>
+                             </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <a href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank" class="flex-1 text-center bg-blue-600 text-white text-xs py-1.5 rounded hover:bg-blue-700 font-medium transition-colors">Chỉ đường</a>
+                        </div>
+                    </div>
+                `)
                 .addTo(layerGroup);
         });
 
-    }, [routes, circles, importedLayers, homeLocation, amenities, mapZoom]);
+        // E. VẼ HEATMAP (GIÁ ĐẤT)
+        if (heatmapSettings.visible) {
+            heatmapData.forEach(item => {
+                if (!item.geometry) return;
+
+                // Determine Color based on Price (Million/m2)
+                const price = item.price / 1000;
+                let colorCode = '#A855F7'; // Min (<10) Purple
+                let rangeId = 'min';
+
+                if (price >= 300) { colorCode = '#FACC15'; rangeId = 'ultra'; } // Yellow
+                else if (price >= 100) { colorCode = '#4ADE80'; rangeId = 'high'; } // Light Green
+                else if (price >= 30) { colorCode = '#2DD4BF'; rangeId = 'mid'; } // Teal
+                else if (price >= 10) { colorCode = '#3B82F6'; rangeId = 'low'; } // Blue
+
+                if (!heatmapSettings.ranges[rangeId]) return; // Skip if range disabled
+
+                L.polyline(item.geometry, {
+                    color: colorCode,
+                    weight: 6, // Thicker for better visibility
+                    opacity: heatmapSettings.opacity,
+                    lineJoin: 'round',
+                    lineCap: 'round'
+                })
+                    .bindPopup(`
+                    <div class="text-center font-sans">
+                        <b style="color:${colorCode}; font-size: 14px;">${item.street}</b><br/>
+                        <div class="text-sm font-bold my-1 text-gray-700">Giá: ${item.price.toLocaleString()} k/m²</div>
+                        <div class="text-xs text-gray-500 italic bg-gray-50 p-1 rounded border border-gray-100 inline-block">
+                            ${item.segment_from || '?'} <span class="text-gray-300">➜</span> ${item.segment_to || '?'}
+                        </div>
+                    </div>
+                `)
+                    .addTo(layerGroup);
+            });
+        }
+
+    }, [routes, circles, importedLayers, homeLocation, amenities, mapZoom, heatmapData, heatmapSettings]);
 
     // --- LOGIC: Context Menu ---
     const handleSetHomeFromMenu = () => {
@@ -349,14 +435,14 @@ export default function MultiRouteVisualizer() {
     const fetchAmenities = async (lat, lon) => {
         setIsFetchingAmenities(true);
         setAmenities([]);
-        // Overpass API query
+        // Overpass API query: Added cafe, restaurant, bank
         const query = `
             [out:json][timeout:25];
             (
-              node["amenity"~"school|hospital|marketplace"](around:2000,${lat},${lon});
-              way["amenity"~"school|hospital|marketplace"](around:2000,${lat},${lon});
-              node["leisure"="park"](around:2000,${lat},${lon});
-              way["leisure"="park"](around:2000,${lat},${lon});
+              node["amenity"~"school|hospital|marketplace|cafe|restaurant|bank"](around:2000,${lat},${lon});
+              way["amenity"~"school|hospital|marketplace|cafe|restaurant|bank"](around:2000,${lat},${lon});
+              node["leisure"~"park"](around:2000,${lat},${lon});
+              way["leisure"~"park"](around:2000,${lat},${lon});
             );
             out center;
         `;
@@ -375,9 +461,12 @@ export default function MultiRouteVisualizer() {
                 const ln = el.lon || el.center?.lon;
 
                 let simpleType = 'other';
-                if (type === 'school' || type === 'university' || type === 'kindergarten') simpleType = 'school';
-                else if (type === 'hospital' || type === 'clinic') simpleType = 'hospital';
+                if (type && type.match(/school|university|kindergarten/)) simpleType = 'school';
+                else if (type && type.match(/hospital|clinic|pharmacy/)) simpleType = 'hospital';
                 else if (type === 'marketplace') simpleType = 'market';
+                else if (type === 'bank') simpleType = 'bank';
+                else if (type === 'cafe') simpleType = 'cafe';
+                else if (type === 'restaurant') simpleType = 'restaurant';
                 else if (type === 'park') simpleType = 'park';
 
                 return {
@@ -525,7 +614,8 @@ export default function MultiRouteVisualizer() {
                     setImportedLayers([...importedLayers, {
                         id: Date.now(),
                         fileName: file.name,
-                        data: features
+                        data: features,
+                        opacity: 1.0 // Default Opacity
                     }]);
 
                     // Auto-zoom to the imported features
@@ -553,6 +643,196 @@ export default function MultiRouteVisualizer() {
         }
         setIsProcessingFile(false);
         e.target.value = null;
+    };
+
+    const normalizeName = (name) => {
+        if (!name) return '';
+        return name.toLowerCase()
+            .replace(/đường|phố|quận|huyện|thành phố|tp/g, '')
+            .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, "a")
+            .replace(/[èéẹẻẽêềếệểễ]/g, "e")
+            .replace(/[ìíịỉĩ]/g, "i")
+            .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, "o")
+            .replace(/[ùúụủũưừứựửữ]/g, "u")
+            .replace(/[ỳýỵỷỹ]/g, "y")
+            .replace(/đ/g, "d")
+            .replace(/[^a-z0-9]/g, ' ')
+            .trim();
+    };
+
+    const handleMatchGeometry = async () => {
+        if (heatmapData.length === 0) return;
+        setIsMatching(true);
+        setMatchingProgress(0);
+
+        // 1. Filter items missing geometry
+        const todoItems = heatmapData.filter(i => !i.geometry);
+        const BATCH_SIZE = 20;
+        const batches = [];
+
+        for (let i = 0; i < todoItems.length; i += BATCH_SIZE) {
+            batches.push(todoItems.slice(i, i + BATCH_SIZE));
+        }
+
+        let processed = 0;
+        const newHeatmapData = [...heatmapData];
+        const dataMap = new Map(newHeatmapData.map(i => [i.id, i]));
+
+
+
+        for (const batch of batches) {
+            // Build Overpass Query
+            const names = batch.map(i => i.street.replace(/["\\]/g, '')).filter(n => n).join('|');
+            // Query highways in South Vietnam (roughly) or just use name match global?
+            // To be safe and fast, let's use a bounding box for Ho Chi Minh City roughly: 
+            // 10.3 to 11.2 Lat, 106.3 to 107.0 Lon
+
+            const query = `
+                [out:json][timeout:25];
+                (
+                  way["highway"]["name"~"^(${names})$",i](10.3,106.3,11.2,107.2);
+                );
+                out geom;
+            `;
+
+            try {
+                const response = await fetch('https://overpass-api.de/api/interpreter', {
+                    method: 'POST',
+                    body: query
+                });
+                const data = await response.json();
+
+                // Map results back to items
+                batch.forEach(item => {
+                    const normItemName = normalizeName(item.street);
+                    // Find matching way
+                    const match = data.elements.find(el => {
+                        const elName = normalizeName(el.tags?.name);
+                        return elName.includes(normItemName) || normItemName.includes(elName);
+                    });
+
+                    if (match && match.geometry) {
+                        const coords = match.geometry.map(p => [p.lat, p.lon]);
+                        const itemInMap = dataMap.get(item.id);
+                        if (itemInMap) itemInMap.geometry = coords;
+                    }
+                });
+
+                processed += batch.length;
+                setMatchingProgress(Math.round((processed / todoItems.length) * 100));
+
+            } catch (err) {
+                console.error("Batch match error:", err);
+            }
+
+            // Respect API rate limits
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        setHeatmapData(newHeatmapData);
+        setIsMatching(false);
+        alert(`Hoàn tất khớp nối! Đã cập nhật ${processed} dòng.`);
+    };
+
+
+
+
+
+
+
+
+
+
+
+
+
+    const handleExportProcessedData = () => {
+        if (heatmapData.length === 0) return;
+        const dataStr = JSON.stringify(heatmapData);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
+        const exportFileDefaultName = `heatmap-data-hcm-${new Date().toISOString().slice(0, 10)}.json`;
+
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    };
+
+    const handleImportProcessedData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const json = JSON.parse(event.target.result);
+                if (Array.isArray(json)) {
+                    setHeatmapData(json);
+                    alert(`Đã tải lại ${json.length} dữ liệu đã xử lý!`);
+                    setActiveTab('heatmap');
+                }
+            } catch (err) {
+                alert("Lỗi file JSON không hợp lệ.");
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = null;
+    };
+
+    const handleImportPriceList = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setIsProcessingFile(true);
+
+        try {
+            const data = await file.arrayBuffer();
+            const workbook = read(data);
+
+            const allItems = [];
+
+            workbook.SheetNames.forEach(sheetName => {
+                const sheet = workbook.Sheets[sheetName];
+                const rows = utils.sheet_to_json(sheet, { header: 1 });
+
+                // Heuristic: Start from row 6 (index 6) matches the standard format
+                // Columns: 1=Name, 2=From, 3=To, 4=Price
+                if (rows.length > 6) {
+                    for (let i = 6; i < rows.length; i++) {
+                        const r = rows[i];
+                        if (r && r[1] && r[4]) { // Must have Name and Price
+                            const price = parseInt(r[4].toString().replace(/[^\d]/g, ''));
+                            if (!isNaN(price)) {
+                                allItems.push({
+                                    id: `${sheetName}-${i}`,
+                                    district: sheetName,
+                                    street: r[1],
+                                    segment_from: r[2] || '',
+                                    segment_to: r[3] || '',
+                                    price: price,
+                                    geometry: null // Will fill in Step 2
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+
+            console.log(`Loaded ${allItems.length} price records.`);
+            setHeatmapData(allItems);
+            if (allItems.length > 0) {
+                alert(`Đã tải thành công ${allItems.length} dữ liệu giá đất!`);
+                setActiveTab('heatmap');
+            } else {
+                alert("Không tìm thấy dữ liệu phù hợp. Vui lòng kiểm tra file Excel.");
+            }
+
+        } catch (err) {
+            console.error("Error reading Excel:", err);
+            alert("Lỗi đọc file Excel.");
+        }
+        setIsProcessingFile(false);
+        e.target.value = null; // Reset input
     };
 
     const handleSmartPaste = (e, setLat, setLon) => {
@@ -672,6 +952,9 @@ export default function MultiRouteVisualizer() {
                         <button onClick={() => setActiveTab('amenity')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'amenity' ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
                             <Home className="w-4 h-4" /> Tiện ích
                         </button>
+                        <button onClick={() => setActiveTab('heatmap')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'heatmap' ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
+                            <DollarSign className="w-4 h-4" /> Giá Đất
+                        </button>
                     </div>
 
                     <div className="p-5 border-b border-gray-200 overflow-y-auto flex-1 custom-scrollbar">
@@ -756,6 +1039,11 @@ export default function MultiRouteVisualizer() {
 
                                 <div>
                                     <label className="text-xs font-semibold text-gray-700 block mb-1">Bán kính (km)</label>
+                                    <div className="flex gap-2 mb-2">
+                                        <button type="button" onClick={() => setRadiusKm('1')} className="flex-1 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-50">1 km</button>
+                                        <button type="button" onClick={() => setRadiusKm('3')} className="flex-1 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-50">3 km</button>
+                                        <button type="button" onClick={() => setRadiusKm('5')} className="flex-1 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-50">5 km</button>
+                                    </div>
                                     <input type="number" step="0.1" value={radiusKm} onChange={e => setRadiusKm(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none shadow-sm" required />
                                 </div>
 
@@ -819,12 +1107,28 @@ export default function MultiRouteVisualizer() {
                                 <div className="space-y-2">
                                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">File đã thêm</h3>
                                     {importedLayers.map(l => (
-                                        <div key={l.id} className="flex justify-between items-center bg-white p-2.5 rounded border border-gray-200 shadow-sm text-sm hover:border-purple-300 transition-colors group">
-                                            <div className="flex items-center gap-3 truncate">
-                                                <Layers className="w-4 h-4 text-purple-500" />
-                                                <span className="truncate w-40 font-medium text-gray-700" title={l.fileName}>{l.fileName}</span>
+                                        <div key={l.id} className="bg-white p-2.5 rounded border border-gray-200 shadow-sm text-sm hover:border-purple-300 transition-colors group">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-3 truncate">
+                                                    <Layers className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                                                    <span className="truncate max-w-[120px] font-medium text-gray-700" title={l.fileName}>{l.fileName}</span>
+                                                </div>
+                                                <button onClick={() => setImportedLayers(importedLayers.filter(x => x.id !== l.id))} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
-                                            <button onClick={() => setImportedLayers(importedLayers.filter(x => x.id !== l.id))} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5" /></button>
+
+                                            {/* Opacity Slider */}
+                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                <span>Mờ:</span>
+                                                <input
+                                                    type="range" min="0" max="1" step="0.1"
+                                                    value={l.opacity !== undefined ? l.opacity : 1}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value);
+                                                        setImportedLayers(importedLayers.map(x => x.id === l.id ? { ...x, opacity: val } : x));
+                                                    }}
+                                                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                     {importedLayers.length === 0 && <div className="text-center text-xs text-gray-400 italic py-4">Chưa import file nào.</div>}
@@ -893,12 +1197,139 @@ export default function MultiRouteVisualizer() {
                             </div>
                         )}
 
+                        {/* TAB: HEATMAP */}
+                        {activeTab === 'heatmap' && (
+                            <div className="space-y-4">
+                                {/* Upload Box */}
+                                <div className="border-2 border-dashed border-green-200 rounded-xl p-6 text-center hover:bg-green-50 transition-colors cursor-pointer group relative overflow-hidden" onClick={() => document.getElementById('heatmap-upload').click()}>
+                                    {isProcessingFile && <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-green-600" /></div>}
+                                    <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                                        <DollarSign className="w-5 h-5" />
+                                    </div>
+                                    <p className="text-sm font-semibold text-gray-700">Nhập bảng giá đất (Excel)</p>
+                                    <input type="file" accept=".xlsx" onChange={handleImportPriceList} className="hidden" id="heatmap-upload" />
+                                </div>
+
+                                {/* Controls */}
+                                {heatmapData.length > 0 && (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="font-medium text-gray-700">Hiển thị lớp màu</span>
+                                            <button onClick={() => setHeatmapSettings(s => ({ ...s, visible: !s.visible }))} className={`p-1 rounded ${heatmapSettings.visible ? 'text-green-600 bg-green-100' : 'text-gray-400 bg-gray-100'}`}>
+                                                {heatmapSettings.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+
+                                        {/* Opacity Slider */}
+                                        <div>
+                                            <label className="text-xs text-gray-500 flex justify-between mb-1">Độ đậm: <span>{Math.round(heatmapSettings.opacity * 100)}%</span></label>
+                                            <input
+                                                type="range" min="0.1" max="1" step="0.1"
+                                                value={heatmapSettings.opacity}
+                                                onChange={e => setHeatmapSettings(s => ({ ...s, opacity: parseFloat(e.target.value) }))}
+                                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                                            />
+                                        </div>
+
+                                        {/* Legend / Toggles */}
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase">Phân khúc giá (triệu/m2)</p>
+                                            {[
+                                                { id: 'ultra', label: '300 - 700+', color: '#FACC15' }, // Yellow
+                                                { id: 'high', label: '100 - 300', color: '#4ADE80' },  // Light Green
+                                                { id: 'mid', label: '30 - 100', color: '#2DD4BF' },    // Teal
+                                                { id: 'low', label: '10 - 30', color: '#3B82F6' },     // Blue
+                                                { id: 'min', label: '2 - 10', color: '#A855F7' },      // Purple
+                                            ].map(range => (
+                                                <div key={range.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded" onClick={() => setHeatmapSettings(s => ({ ...s, ranges: { ...s.ranges, [range.id]: !s.ranges[range.id] } }))}>
+                                                    <div className={`w-4 h-4 rounded border transition-colors ${heatmapSettings.ranges[range.id] ? 'border-transparent' : 'border-gray-300 bg-white'}`} style={{ backgroundColor: heatmapSettings.ranges[range.id] ? range.color : 'transparent' }}>
+                                                        {heatmapSettings.ranges[range.id] && <Check className="w-3 h-3 text-white mx-auto mt-0.5" />}
+                                                    </div>
+                                                    <span className="text-sm text-gray-600 flex-1">{range.label}</span>
+                                                    <span className="text-xs text-gray-400 font-mono">
+                                                        {heatmapData.filter(d => {
+                                                            const p = d.price / 1000;
+                                                            if (range.id === 'min') return p < 10;
+                                                            if (range.id === 'low') return p >= 10 && p < 30;
+                                                            if (range.id === 'mid') return p >= 30 && p < 100;
+                                                            if (range.id === 'high') return p >= 100 && p < 300;
+                                                            return p >= 300;
+                                                        }).length}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="pt-2 border-t border-gray-100 space-y-2">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    onClick={() => document.getElementById('json-upload').click()}
+                                                    className="py-1.5 px-3 bg-white border border-gray-300 rounded text-xs text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-1"
+                                                >
+                                                    <FileUp className="w-3 h-3" /> Nạp JSON
+                                                </button>
+                                                <input type="file" accept=".json" onChange={handleImportProcessedData} className="hidden" id="json-upload" />
+
+                                                <button
+                                                    onClick={handleExportProcessedData}
+                                                    disabled={heatmapData.filter(x => x.geometry).length === 0}
+                                                    className="py-1.5 px-3 bg-white border border-gray-300 rounded text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                                                >
+                                                    <Copy className="w-3 h-3" /> Lưu JSON
+                                                </button>
+                                            </div>
+
+                                            <p className="text-xs text-center text-gray-400">
+                                                Đã tải: {heatmapData.length} | Đã khớp: {heatmapData.filter(x => x.geometry).length}
+                                            </p>
+
+                                            <button
+                                                onClick={handleMatchGeometry}
+                                                disabled={isMatching || heatmapData.length === 0}
+                                                className={`w-full py-2 rounded text-xs font-bold uppercase tracking-wider transition-all ${isMatching ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-lg'}`}
+                                            >
+                                                {isMatching ? `Đang xử lý ${matchingProgress}%...` : 'Bắt đầu Khớp nối (Map Matching)'}
+                                            </button>
+
+                                            {isMatching && (
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                                    <div className="bg-green-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${matchingProgress}%` }}></div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 </div>
 
                 {/* Map Area */}
                 <div className="flex-1 relative bg-gray-100">
                     <div ref={mapRef} className="w-full h-full z-0 outline-none" />
+
+                    {/* Floating Legend for Heatmap */}
+                    {heatmapSettings.visible && heatmapData.length > 0 && (
+                        <div className="absolute top-4 right-4 bg-white/95 px-4 py-3 rounded-lg shadow-xl backdrop-blur-md z-[1000] border border-gray-200">
+                            <h3 className="text-xs font-bold text-gray-600 uppercase mb-2 tracking-wider">Giá đất TP.HCM (Tr/m2)</h3>
+                            <div className="space-y-1.5 min-w-[140px]">
+                                {[
+                                    { label: '300 - 700+', color: '#FACC15' },
+                                    { label: '100 - 300', color: '#4ADE80' },
+                                    { label: '30 - 100', color: '#2DD4BF' },
+                                    { label: '10 - 30', color: '#3B82F6' },
+                                    { label: '2 - 10', color: '#A855F7' },
+                                ].map(item => (
+                                    <div key={item.label} className="flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-sm shadow-sm" style={{ backgroundColor: item.color }}></span>
+                                        <span className="text-[10px] font-medium text-gray-700">{item.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-2 text-[9px] text-gray-400 text-right">Nguồn: Biggee.vn</div>
+                        </div>
+                    )}
 
                     <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2.5 text-xs text-gray-600 rounded-lg shadow-lg backdrop-blur-md z-[1000] pointer-events-none border border-white/50 flex items-center gap-2">
                         <MousePointer2 className="w-3.5 h-3.5 text-blue-500" />
