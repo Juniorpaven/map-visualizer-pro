@@ -3,12 +3,14 @@ import {
     Trash2, Plus, Map as MapIcon, Navigation, Target,
     Loader2, ArrowDown, RotateCcw, Copy, Check,
     Circle as CircleIcon, FileUp, Layers, MousePointer2,
-    Search, MapPin, Globe, Home
+    Search, MapPin, Globe, Home, Presentation, FileDown, Printer, Camera, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import JSZip from 'jszip';
 import { mockProperties } from '../mockProperties';
+import html2canvas from 'html2canvas';
+import QRCode from 'qrcode';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -67,6 +69,14 @@ export default function MultiRouteVisualizer() {
     const [isProcessingFile, setIsProcessingFile] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
     const [copyFeedback, setCopyFeedback] = useState(false);
+    const [storySteps, setStorySteps] = useState([
+        { id: 1, title: 'Tổng quan khu vực', desc: 'Vị trí trung tâm Quận 1, kết nối thuận tiện.', lat: 10.7769, lon: 106.7009, zoom: 14 },
+        { id: 2, title: 'Tiện ích giáo dục', desc: 'Hệ thống trường học quốc tế trong bán kính 2km.', lat: 10.7800, lon: 106.6980, zoom: 15 },
+        { id: 3, title: 'Hạ tầng giao thông', desc: 'Tuyến Metro số 1 sắp đi vào hoạt động.', lat: 10.7720, lon: 106.7050, zoom: 16 }
+    ]);
+    const [currentStoryStep, setCurrentStoryStep] = useState(0);
+    const [isExporting, setIsExporting] = useState(false);
+    const [generatedQR, setGeneratedQR] = useState('');
 
     const [mapZoom, setMapZoom] = useState(13);
 
@@ -686,6 +696,63 @@ export default function MultiRouteVisualizer() {
         }
     };
 
+    // --- LOGIC: Story Mode ---
+    const handleNextStep = () => {
+        if (currentStoryStep < storySteps.length - 1) {
+            const nextStep = currentStoryStep + 1;
+            setCurrentStoryStep(nextStep);
+            const step = storySteps[nextStep];
+            if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([step.lat, step.lon], step.zoom, { duration: 1.5 });
+            }
+        }
+    };
+
+    const handlePrevStep = () => {
+        if (currentStoryStep > 0) {
+            const prevStep = currentStoryStep - 1;
+            setCurrentStoryStep(prevStep);
+            const step = storySteps[prevStep];
+            if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([step.lat, step.lon], step.zoom, { duration: 1.5 });
+            }
+        }
+    };
+
+    const handlePlayStory = (index) => {
+        setCurrentStoryStep(index);
+        const step = storySteps[index];
+        if (mapInstanceRef.current) {
+            mapInstanceRef.current.flyTo([step.lat, step.lon], step.zoom, { duration: 1.5 });
+        }
+    }
+
+    // --- LOGIC: Export ---
+    const handleExport = async () => {
+        setIsExporting(true);
+        // Generate QR Code first
+        try {
+            const url = window.location.href; // In real app, this would be a specific deep link
+            const qrData = await QRCode.toDataURL(url);
+            setGeneratedQR(qrData);
+
+            // Wait a bit for render
+            setTimeout(async () => {
+                const element = document.body; // Capture full body essentially
+                const canvas = await html2canvas(element, { useCORS: true });
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `RealEstate_Report_${Date.now()}.png`;
+                link.href = dataUrl;
+                link.click();
+                setIsExporting(false);
+            }, 1000); // Wait for Overlay to render
+        } catch (err) {
+            console.error(err);
+            setIsExporting(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-screen bg-gray-50 text-slate-800 font-sans relative" onClick={() => contextMenu && setContextMenu(null)}>
 
@@ -794,6 +861,12 @@ export default function MultiRouteVisualizer() {
                         </button>
                         <button onClick={() => setActiveTab('amenity')} className={`px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'amenity' ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
                             <Target className="w-4 h-4" /> Tiện ích
+                        </button>
+                        <button onClick={() => setActiveTab('presentation')} className={`px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'presentation' ? 'text-teal-600 border-b-2 border-teal-600 bg-teal-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
+                            <Presentation className="w-4 h-4" /> Trình bày
+                        </button>
+                        <button onClick={() => setActiveTab('export')} className={`px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'export' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
+                            <Printer className="w-4 h-4" /> Xuất bản
                         </button>
                     </div>
 
@@ -1008,63 +1081,93 @@ export default function MultiRouteVisualizer() {
                         )}
 
                         {/* TAB: AMENITY */}
-                        {activeTab === 'amenity' && (
+                        {/* TAB: PRESENTATION (Story Mode) */}
+                        {activeTab === 'presentation' && (
                             <div className="space-y-4">
-                                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
-                                    <label className="text-xs font-bold text-orange-800 flex justify-between items-center mb-1">
-                                        Vị trí Nhà / Trung tâm
-                                        <span className="font-normal bg-white px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 cursor-help border border-orange-100 shadow-sm text-orange-700" title="Chuột phải lên bản đồ để lấy nhanh"><MousePointer2 className="w-3 h-3" /> Click map</span>
-                                    </label>
+                                <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 mb-4">
+                                    <h3 className="font-bold text-teal-800 text-sm mb-2 flex items-center gap-2">
+                                        <Presentation className="w-4 h-4" /> Chế độ Trình chiếu
+                                    </h3>
+                                    <p className="text-xs text-teal-600 mb-3">Dẫn dắt khách hàng qua các điểm nhấn quan trọng theo kịch bản.</p>
 
-                                    {homeLocation ? (
-                                        <div className="flex justify-between items-center bg-white p-2.5 rounded border border-orange-200 shadow-sm text-sm">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white shadow-sm">
-                                                    <Home className="w-4 h-4" />
-                                                </div>
-                                                <div>
-                                                    <div className="font-medium text-gray-700">Vị trí đang chọn</div>
-                                                    <div className="text-xs text-gray-500">{homeLocation.lat.toFixed(5)}, {homeLocation.lon.toFixed(5)}</div>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => { setHomeLocation(null); setAmenities([]); }} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition-colors" title="Xóa vị trí nhà">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm border border-teal-200">
+                                        <button onClick={handlePrevStep} disabled={currentStoryStep === 0} className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors">
+                                            <ChevronLeft className="w-5 h-5 text-gray-600" />
+                                        </button>
+                                        <div className="text-center">
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Bước {currentStoryStep + 1} / {storySteps.length}</div>
+                                            <div className="font-bold text-gray-800">{storySteps[currentStoryStep].title}</div>
                                         </div>
-                                    ) : (
-                                        <div className="text-center text-xs text-gray-400 py-4 italic border-2 border-dashed border-orange-200 rounded bg-white">
-                                            Chưa đặt vị trí nhà
-                                        </div>
-                                    )}
+                                        <button onClick={handleNextStep} disabled={currentStoryStep === storySteps.length - 1} className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors">
+                                            <ChevronRight className="w-5 h-5 text-gray-600" />
+                                        </button>
+                                    </div>
 
-                                    {isFetchingAmenities && (
-                                        <div className="flex items-center justify-center py-4 text-orange-500 gap-2 text-sm">
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Đang tải tiện ích...
-                                        </div>
-                                    )}
+                                    <div className="mt-3 bg-white p-3 rounded text-sm text-gray-700 italic border-l-4 border-teal-400">
+                                        "{storySteps[currentStoryStep].desc}"
+                                    </div>
                                 </div>
 
-                                {/* List Amenities Count */}
-                                {amenities.length > 0 && (
-                                    <div className="space-y-2">
-                                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tiện ích xung quanh (2km)</h3>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="bg-white p-2 rounded border border-gray-200 text-center">
-                                                <div className="text-lg font-bold text-blue-600">{amenities.length}</div>
-                                                <div className="text-xs text-gray-500">Tổng số</div>
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Danh sách điểm nhấn</h4>
+                                    {storySteps.map((step, idx) => (
+                                        <div key={step.id}
+                                            onClick={() => handlePlayStory(idx)}
+                                            className={`p-3 rounded border cursor-pointer transition-all flex items-center gap-3 ${currentStoryStep === idx ? 'bg-teal-50 border-teal-500 shadow-sm' : 'bg-white border-gray-200 hover:border-teal-300'}`}
+                                        >
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${currentStoryStep === idx ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                                {idx + 1}
+                                            </div>
+                                            <div>
+                                                <div className={`text-sm font-medium ${currentStoryStep === idx ? 'text-teal-900' : 'text-gray-700'}`}>{step.title}</div>
+                                                <div className="text-xs text-gray-500 truncate w-48">{step.desc}</div>
                                             </div>
                                         </div>
-                                        <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                            {amenities.map(item => (
-                                                <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border border-gray-100 text-xs">
-                                                    <span className="truncate font-medium text-gray-700">{item.name}</span>
-                                                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 capitalize">{item.type}</span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB: EXPORT */}
+                        {activeTab === 'export' && (
+                            <div className="space-y-6">
+                                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-center">
+                                    <Printer className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
+                                    <h3 className="font-bold text-indigo-800 text-sm">Xuất bản Báo cáo</h3>
+                                    <p className="text-xs text-indigo-600 mt-1">Tạo hình ảnh chuyên nghiệp gửi khách hàng.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="text-xs font-semibold text-gray-700 block">Tùy chọn xuất</label>
+
+                                    <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded text-sm text-gray-700">
+                                        <input type="checkbox" checked readOnly className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                        <span className="flex-1">Logo thương hiệu</span>
+                                        <span className="text-xs text-indigo-600 font-medium">Bắt buộc</span>
                                     </div>
-                                )}
+                                    <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded text-sm text-gray-700">
+                                        <input type="checkbox" checked readOnly className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                        <span className="flex-1">Mã QR truy cập nhanh</span>
+                                        <span className="text-xs text-indigo-600 font-medium">Auto</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded text-sm text-gray-700">
+                                        <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                        <span>Bao gồm chú thích bản đồ</span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleExport}
+                                    disabled={isExporting}
+                                    className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+                                >
+                                    {isExporting ? <Loader2 className="animate-spin w-5 h-5" /> : <Camera className="w-5 h-5" />}
+                                    {isExporting ? 'Đang xử lý...' : 'Chụp ảnh báo cáo (PNG)'}
+                                </button>
+
+                                <p className="text-[10px] text-center text-gray-400">
+                                    *Hệ thống sẽ tự động chèn Watermark và QR Code vào ảnh xuất ra.
+                                </p>
                             </div>
                         )}
 
@@ -1074,6 +1177,34 @@ export default function MultiRouteVisualizer() {
                 {/* Map Area */}
                 <div className="flex-1 relative bg-gray-100">
                     <div ref={mapRef} className="w-full h-full z-0 outline-none" />
+
+                    {/* Export Overlay (Visible only during export) */}
+                    {isExporting && (
+                        <div className="absolute inset-0 z-[9999] pointer-events-none flex flex-col justify-between p-6 border-[20px] border-white/50 animate-in fade-in duration-300">
+                            <div className="flex justify-between items-start">
+                                <div className="bg-blue-900 text-white px-6 py-4 rounded-xl shadow-2xl">
+                                    <h1 className="text-2xl font-bold uppercase tracking-widest">Báo cáo Tư vấn</h1>
+                                    <div className="text-sm opacity-80 font-light">Bất Động Sản Chiến Lược</div>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg shadow-xl">
+                                    {generatedQR && <img src={generatedQR} className="w-24 h-24" alt="QR Code" />}
+                                    <div className="text-[9px] text-center font-mono mt-1 text-gray-500">Scan Me</div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-xl max-w-sm self-end">
+                                <h3 className="font-bold text-gray-800 mb-1 border-b border-gray-300 pb-1">Chú thích</h3>
+                                <div className="space-y-1 text-xs text-gray-600">
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full"></div> Vị trí quan tâm</div>
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div> Tiện ích (Trường học, Chợ)</div>
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded-full"></div> Công viên cây xanh</div>
+                                </div>
+                                <div className="mt-3 text-[10px] text-gray-400 italic">
+                                    Được tạo bởi Map Visualizer Pro
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2.5 text-xs text-gray-600 rounded-lg shadow-lg backdrop-blur-md z-[1000] pointer-events-none border border-white/50 flex items-center gap-2">
                         <MousePointer2 className="w-3.5 h-3.5 text-blue-500" />
