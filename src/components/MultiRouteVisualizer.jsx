@@ -70,6 +70,13 @@ export default function MultiRouteVisualizer() {
 
     const [mapZoom, setMapZoom] = useState(13);
 
+    // Derived State for Filtering
+    const filteredProperties = properties.filter(p => {
+        if (filterType !== 'all' && p.type !== filterType) return false;
+        if (filterStatus !== 'all' && p.status !== filterStatus) return false;
+        return true;
+    });
+
     const mapRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const layerGroupRef = useRef(null);
@@ -324,11 +331,41 @@ export default function MultiRouteVisualizer() {
                 .addTo(layerGroup);
         });
 
-        // Derived State for Filtering
-        const filteredProperties = properties.filter(p => {
-            if (filterType !== 'all' && p.type !== filterType) return false;
-            if (filterStatus !== 'all' && p.status !== filterStatus) return false;
-            return true;
+        // E. VẼ BẤT ĐỘNG SẢN (PROPERTIES)
+        filteredProperties.forEach(prop => {
+            const marker = L.marker([prop.lat, prop.lon], {
+                icon: getPropertyIcon(prop.type, prop.status)
+            }).addTo(layerGroup);
+
+            // Rich Card Popup Content
+            const popupContent = `
+            <div class="font-sans min-w-[240px] max-w-xs">
+                <div class="relative h-32 w-full bg-gray-200 rounded-t-lg overflow-hidden mb-2">
+                    <img src="${prop.image_url}" alt="${prop.title}" class="w-full h-full object-cover" />
+                    <div class="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-xs font-bold text-gray-800 shadow-sm">
+                        ${prop.price}
+                    </div>
+                    <div class="absolute bottom-2 left-2 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] uppercase">
+                        ${prop.type}
+                    </div>
+                </div>
+                <div class="px-1">
+                    <h3 class="font-bold text-gray-800 text-sm leading-tight mb-1">${prop.title}</h3>
+                    <p class="text-xs text-gray-500 flex items-center gap-1 mb-2">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        ${prop.address}
+                    </p>
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${prop.tags.map(tag => `<span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] border border-gray-200">${tag}</span>`).join('')}
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="flex-1 bg-blue-600 text-white text-xs py-1.5 rounded hover:bg-blue-700 font-medium transition-colors">Liên hệ</button>
+                        <button class="flex-1 bg-white border border-gray-300 text-gray-700 text-xs py-1.5 rounded hover:bg-gray-50 font-medium transition-colors">Chi tiết</button>
+                    </div>
+                </div>
+            </div>
+        `;
+            marker.bindPopup(popupContent, { closeButton: false, className: 'rich-popup' });
         });
 
     }, [routes, circles, importedLayers, homeLocation, amenities, mapZoom, properties, filterType, filterStatus]);
@@ -383,42 +420,7 @@ export default function MultiRouteVisualizer() {
         });
     }
 
-    // E. VẼ BẤT ĐỘNG SẢN (PROPERTIES)
-    filteredProperties.forEach(prop => {
-        const marker = L.marker([prop.lat, prop.lon], {
-            icon: getPropertyIcon(prop.type, prop.status)
-        }).addTo(layerGroup);
 
-        // Rich Card Popup Content
-        const popupContent = `
-            <div class="font-sans min-w-[240px] max-w-xs">
-                <div class="relative h-32 w-full bg-gray-200 rounded-t-lg overflow-hidden mb-2">
-                    <img src="${prop.image_url}" alt="${prop.title}" class="w-full h-full object-cover" />
-                    <div class="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-xs font-bold text-gray-800 shadow-sm">
-                        ${prop.price}
-                    </div>
-                    <div class="absolute bottom-2 left-2 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] uppercase">
-                        ${prop.type}
-                    </div>
-                </div>
-                <div class="px-1">
-                    <h3 class="font-bold text-gray-800 text-sm leading-tight mb-1">${prop.title}</h3>
-                    <p class="text-xs text-gray-500 flex items-center gap-1 mb-2">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        ${prop.address}
-                    </p>
-                    <div class="flex flex-wrap gap-1 mb-3">
-                        ${prop.tags.map(tag => `<span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] border border-gray-200">${tag}</span>`).join('')}
-                    </div>
-                    <div class="flex gap-2">
-                        <button class="flex-1 bg-blue-600 text-white text-xs py-1.5 rounded hover:bg-blue-700 font-medium transition-colors">Liên hệ</button>
-                        <button class="flex-1 bg-white border border-gray-300 text-gray-700 text-xs py-1.5 rounded hover:bg-gray-50 font-medium transition-colors">Chi tiết</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        marker.bindPopup(popupContent, { closeButton: false, className: 'rich-popup' });
-    });
 
     // --- LOGIC: Context Menu ---
     const handleSetHomeFromMenu = () => {
