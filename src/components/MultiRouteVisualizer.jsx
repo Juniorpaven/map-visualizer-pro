@@ -1080,7 +1080,68 @@ export default function MultiRouteVisualizer() {
                             </div>
                         )}
 
+
                         {/* TAB: AMENITY */}
+                        {activeTab === 'amenity' && (
+                            <div className="space-y-4">
+                                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                                    <label className="text-xs font-bold text-orange-800 flex justify-between items-center mb-1">
+                                        Vị trí Nhà / Trung tâm
+                                        <span className="font-normal bg-white px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 cursor-help border border-orange-100 shadow-sm text-orange-700" title="Chuột phải lên bản đồ để lấy nhanh"><MousePointer2 className="w-3 h-3" /> Click map</span>
+                                    </label>
+
+                                    {homeLocation ? (
+                                        <div className="flex justify-between items-center bg-white p-2.5 rounded border border-orange-200 shadow-sm text-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white shadow-sm">
+                                                    <Home className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium text-gray-700">Vị trí đang chọn</div>
+                                                    <div className="text-xs text-gray-500">{homeLocation.lat.toFixed(5)}, {homeLocation.lon.toFixed(5)}</div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => { setHomeLocation(null); setAmenities([]); }} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition-colors" title="Xóa vị trí nhà">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-xs text-gray-400 py-4 italic border-2 border-dashed border-orange-200 rounded bg-white">
+                                            Chưa đặt vị trí nhà
+                                        </div>
+                                    )}
+
+                                    {isFetchingAmenities && (
+                                        <div className="flex items-center justify-center py-4 text-orange-500 gap-2 text-sm">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Đang tải tiện ích...
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* List Amenities Count */}
+                                {amenities.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tiện ích xung quanh (2km)</h3>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-white p-2 rounded border border-gray-200 text-center">
+                                                <div className="text-lg font-bold text-blue-600">{amenities.length}</div>
+                                                <div className="text-xs text-gray-500">Tổng số</div>
+                                            </div>
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                            {amenities.map(item => (
+                                                <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border border-gray-100 text-xs">
+                                                    <span className="truncate font-medium text-gray-700">{item.name}</span>
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 capitalize">{item.type}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* TAB: PRESENTATION (Story Mode) */}
                         {activeTab === 'presentation' && (
                             <div className="space-y-4">
